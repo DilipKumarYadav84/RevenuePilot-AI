@@ -1,0 +1,124 @@
+RevenuePilot AI
+Shopper Journey
+Merchant Console
+Director Dual-View
+Scenario Playbook
+
+SHOPPER JOURNEY
+
+Find your fit. Buy with confidence.
+Razorpay Test Mode
+
+TECHNOVA SHOPPING ASSISTANT
+
+RevenuePilot AI
+AI guided
+You
+
+I need a laptop for AI development under INR 70,000
+
+RevenuePilot AI
+
+The NeuralBook X15 is the strongest catalog match at ₹69,999. Key fit: Intel Core i7-13620H, NVIDIA GeForce RTX 4050 6GB, 16GB DDR5, expandable to 32GB, 58Wh, up to 6.5 hours. A useful alternative is DevBook Pro 14 at ₹64,999, especially if its trade-offs fit your priorities better.
+
+You
+
+DevBook Air 14 is so expensive but I really like it
+
+RevenuePilot AI
+
+The DevBook Air 14 is the strongest catalog match at ₹54,999. Key fit: Intel Core i5-13420H, Intel UHD integrated graphics, 16GB LPDDR5, 62Wh, up to 11 hours. A useful alternative is NeuralBook X15 at ₹69,999, especially if its trade-offs fit your priorities better.
+
+Message RevenuePilot AI
+Send
+
+UNDERSTANDING YOUR NEEDS
+
+Considering value
+Policy trace
+Category
+Laptop
+Budget
+₹70,000
+Price sensitivity
+High
+Primary use case
+AI Development
+
+CATALOG-BACKED PICKS
+
+Recommendations
+4 matches
+BEST MATCH
+NeuralBook X15
+₹69,999
+Within budget at INR 69999
+NVIDIA GeForce RTX 4050 6GB / 16GB DDR5, expandable to 32GB / Intel Core i7-13620H
+Trade-off: 58Wh, up to 6.5 hours with NVIDIA GeForce RTX 4050 6GB.
+STRONG ALTERNATIVE
+DevBook Pro 14
+₹64,999
+Within budget at INR 64999
+AMD Radeon 780M integrated graphics / 16GB DDR5 / AMD Ryzen 7 7840U
+Trade-off: 70Wh, up to 10 hours with AMD Radeon 780M integrated graphics.
+STRONG ALTERNATIVE
+DevBook Air 14
+₹54,999
+Within budget at INR 54999
+Intel UHD integrated graphics / 16GB LPDDR5 / Intel Core i5-13420H
+Trade-off: 62Wh, up to 11 hours with Intel UHD integrated graphics.
+Selected
+View all 4
+
+SELECTED PRODUCT
+
+DevBook Air 14
+
+Intel UHD integrated graphics / 16GB LPDDR5 / 512GB NVMe SSD
+
+Original price
+₹54,999
+AI PROPOSED
+15% off
+MERCHANT POLICY
+15% → 10%
+YOU SAVE
+₹5,499.90
+FINAL PRICE
+₹49,499.10
+Processor
+Intel Core i5-13420H
+RAM
+16GB LPDDR5
+Storage
+512GB NVMe SSD
+Battery
+62Wh, up to 11 hours
+students
+web development
+portability
+Why RevenuePilot picked this
+Matches laptop
+Within budget at INR 54999
+
+Accepted · Complete payment in 09:52
+
+Checkout open
+
+RAZORPAY CHECKOUT
+
+Secure payment
+TEST MODE
+
+Waiting for payment in Razorpay Test Mode...
+
+Payment success is confirmed only after server-side verification.
+
+✓
+Server-priced purchase
+✓
+Razorpay order created
+Awaiting payment
+Server verification
+Razorpay Test Mode Helper
+Test Mode

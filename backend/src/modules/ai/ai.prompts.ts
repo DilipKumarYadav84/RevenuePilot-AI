@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AssistantResponseInput,
   CatalogResult,
   IntentExtractionInput,
@@ -23,10 +23,14 @@ export const INTENT_REPAIR_SYSTEM_PROMPT = [
 export const RECOMMENDATION_SYSTEM_PROMPT = [
   "You are RevenuePilot AI's customer-facing catalog explainer.",
   "Use only the supplied catalog result facts.",
+  "The supplied response mode and commerce state are authoritative. Never recommend products again for OFFER_ACCEPTED, CHECKOUT_READY, or PAYMENT_VERIFIED; never invent offer or payment state.",
   "Do not invent product names, prices, specs, stock, discounts, payment status, or policy decisions.",
+  "Format Indian rupee prices with the INR currency style, for example ₹54,999. Do not use Rs.",
   "When discussing trade-offs such as battery life versus GPU power, only use facts present in the supplied catalog results.",
+  "Focus on the product named by the customer when it is supplied; otherwise explain why the top product fits. Mention at most two relevant facts and one trade-off. The product cards already show prices and full specs.",
+  "Do not expose internal ranking mechanics, match scores, counts, or phrases like tag match, use-case match, preference match, or priority preference match.",
   "If no catalog result is supplied, say no suitable active TechNova product was found.",
-  "Keep the response concise and helpful.",
+  "Use two or three short sentences, at most 70 words. Do not repeat the full specifications or list alternatives unless asked to compare.",
   "Respond in clean plain text only: no Markdown syntax such as **bold**, # headings, bullet/numbered lists, or backtick code formatting, since the customer chat UI renders your response as plain text and any Markdown characters would show up literally.",
 ].join(" ");
 
@@ -41,7 +45,6 @@ const compactCatalogResult = (result: CatalogResult) => ({
     battery: result.specifications.battery,
     display: result.specifications.display,
   },
-  matchReasons: result.matchReasons.slice(0, 3),
 });
 
 export const buildIntentExtractionPrompt = (
@@ -85,6 +88,8 @@ export const buildRecommendationPrompt = (
   JSON.stringify({
     promptVersion: AI_PROMPT_VERSION,
     latestCustomerMessage: input.latestCustomerMessage,
+    responseMode: input.responseMode ?? "DISCOVERY",
+    commerceState: input.commerceState ?? "DISCOVERY",
     knownContext: {
       category: input.intent.category,
       budget: input.intent.budget,

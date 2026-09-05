@@ -47,6 +47,13 @@ const priceHesitationPatterns = [
   "costs too much",
   "price is high",
   "price high",
+  "so expensive",
+  "it is expensive",
+  "its expensive",
+  "pricey",
+  "can i get a discount",
+  "can i get some discount",
+  "discount please",
   "more than i wanted",
   "more than my budget",
   "costly",
@@ -56,6 +63,7 @@ const priceHesitationPatterns = [
 
 const strongPurchaseIntentPatterns = [
   "buy",
+  "ready to buy",
   "i want this",
   "i want this one",
   "buy this now",
@@ -123,7 +131,7 @@ const detectBehavioralSignals = (
   StructuredIntent,
   "priceSensitivity" | "purchaseIntent" | "abandonmentRisk" | "customerState"
 > => {
-  const hasPriceHesitation = hasAnyPattern(message, priceHesitationPatterns);
+  const hasPriceHesitation = hasAnyPattern(message, priceHesitationPatterns) || /\b(?:can i|could i|may i).{0,20}\bdiscount\b/.test(message);
   const hasStrongPurchaseIntent = hasAnyPattern(message, strongPurchaseIntentPatterns);
   const hasComparisonBehavior = hasAnyPattern(message, comparisonPatterns);
   const hasAbandonmentRisk = hasAnyPattern(message, abandonmentRiskPatterns);

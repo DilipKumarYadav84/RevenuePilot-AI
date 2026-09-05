@@ -64,6 +64,8 @@ export type AssistantResponseInput = {
   intent: StructuredIntent;
   catalogResults: CatalogResult[];
   latestCustomerMessage?: string | undefined;
+  responseMode?: "DISCOVERY" | "COMPARISON" | "HESITATION_POLICY_RESULT" | "ACTIVE_OFFER" | "OFFER_ACCEPTED" | "CHECKOUT_READY" | "PAYMENT_VERIFIED" | undefined;
+  commerceState?: string | undefined;
 };
 
 export type AIProviderMetadata = {

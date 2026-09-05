@@ -25,6 +25,7 @@ const POLICY_INTERVENTION_EVENTS: AuditEventType[] = [
   "POLICY_BLOCKED",
   "POLICY_REQUIRES_APPROVAL",
 ];
+const ACTIVE_CONVERSATION_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const getObjectIdString = (record: unknown): string => {
   if (!record || typeof record !== "object" || !("_id" in record)) {
@@ -110,18 +111,23 @@ export const calculateConversionRate = (
   return Math.round((numerator / denominator) * 1000) / 10;
 };
 
+export const getActiveConversationWindowStart = (now = new Date()): Date =>
+  new Date(now.getTime() - ACTIVE_CONVERSATION_WINDOW_MS);
+
 export const buildDashboardFunnel = (
-  metrics: Pick<
-    DashboardMetrics,
-    "totalConversations" | "recommendations" | "offersCreated" | "offersAccepted" | "verifiedPayments"
-  >,
-): DashboardFunnel => ({
-  conversations: metrics.totalConversations,
-  recommendations: metrics.recommendations,
-  offers: metrics.offersCreated,
-  acceptedOffers: metrics.offersAccepted,
-  verifiedPayments: metrics.verifiedPayments,
-});
+  stages: { conversations: unknown[]; recommendations: unknown[]; offers: unknown[];
+    acceptedOffers: unknown[]; verifiedPayments: unknown[] },
+): DashboardFunnel => {
+  const qualifying = new Set(stages.conversations.map(String));
+  const count = (ids: unknown[]) => new Set(ids.map(String).filter(id => qualifying.has(id))).size;
+  return {
+    conversations: qualifying.size,
+    recommendations: count(stages.recommendations),
+    offers: count(stages.offers),
+    acceptedOffers: count(stages.acceptedOffers),
+    verifiedPayments: count(stages.verifiedPayments),
+  };
+};
 
 export const mapConversationSummary = (
   conversation: Conversation,
@@ -222,12 +228,20 @@ export const getDashboardSummary = async (): Promise<DashboardSummary> => {
     recentPayments,
     recommendationEvents,
     recentAuditEvents,
+    conversationIds,
+    recommendedConversationIds,
+    offerConversationIds,
+    acceptedConversationIds,
+    verifiedConversationIds,
   ] = await Promise.all([
     ConversationModel.countDocuments({}).exec(),
-    ConversationModel.countDocuments({ status: "active" }).exec(),
+    ConversationModel.countDocuments({
+      status: "active",
+      updatedAt: { $gte: getActiveConversationWindowStart() },
+    }).exec(),
     AuditEventModel.countDocuments({ eventType: "PRODUCT_RECOMMENDED" }).exec(),
-    OfferModel.countDocuments({}).exec(),
-    OfferModel.countDocuments({ status: "accepted" }).exec(),
+    OfferModel.countDocuments({ actionType: "CREATE_DISCOUNT" }).exec(),
+    OfferModel.countDocuments({ actionType: "CREATE_DISCOUNT", status: "accepted" }).exec(),
     PaymentModel.countDocuments({ status: "verified" }).exec(),
     AuditEventModel.countDocuments({
       eventType: { $in: POLICY_INTERVENTION_EVENTS },
@@ -241,7 +255,7 @@ export const getDashboardSummary = async (): Promise<DashboardSummary> => {
       .limit(12)
       .lean<Conversation[]>()
       .exec(),
-    OfferModel.find({})
+    OfferModel.find({ actionType: "CREATE_DISCOUNT" })
       .sort({ createdAt: -1, _id: -1 })
       .limit(20)
       .lean<Offer[]>()
@@ -261,6 +275,12 @@ export const getDashboardSummary = async (): Promise<DashboardSummary> => {
       .limit(40)
       .lean<AuditEvent[]>()
       .exec(),
+    ConversationModel.distinct("_id").exec(),
+    AuditEventModel.distinct("conversationId", { eventType: "PRODUCT_RECOMMENDED" }).exec(),
+    // Include direct-checkout offers in the journey stages, but keep the incentive KPI separate.
+    OfferModel.distinct("conversationId").exec(),
+    OfferModel.distinct("conversationId", { status: "accepted" }).exec(),
+    PaymentModel.distinct("conversationId", { status: "verified" }).exec(),
   ]);
 
   const metrics: DashboardMetrics = {
@@ -276,7 +296,11 @@ export const getDashboardSummary = async (): Promise<DashboardSummary> => {
 
   return {
     metrics,
-    funnel: buildDashboardFunnel(metrics),
+    funnel: buildDashboardFunnel({
+      conversations: conversationIds, recommendations: recommendedConversationIds,
+      offers: offerConversationIds, acceptedOffers: acceptedConversationIds,
+      verifiedPayments: verifiedConversationIds,
+    }),
     recentConversations: recentConversations.map(mapConversationSummary),
     recentOffers: recentOffers.map(mapOfferSummary),
     recentPayments: recentPayments.map(mapPaymentSummary),

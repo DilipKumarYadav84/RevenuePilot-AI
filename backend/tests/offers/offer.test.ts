@@ -14,8 +14,15 @@ import {
   isOfferExpired,
   rupeesToPaise,
 } from "../../src/modules/offers/offer.service";
-import type { CreateOfferInput, Offer } from "../../src/modules/offers/offer.types";
-import { createOfferSchema } from "../../src/modules/offers/offer.validation";
+import type {
+  CreateCheckoutOfferInput,
+  CreateOfferInput,
+  Offer,
+} from "../../src/modules/offers/offer.types";
+import {
+  createCheckoutOfferSchema,
+  createOfferSchema,
+} from "../../src/modules/offers/offer.validation";
 
 const basePolicy: MerchantPolicy = {
   merchantKey: "technova",
@@ -36,6 +43,12 @@ const offerInput: CreateOfferInput = {
   conversationId: "507f1f77bcf86cd799439011",
   productId: "507f1f77bcf86cd799439012",
   requestedDiscountPercent: 15,
+};
+
+const checkoutOfferInput: CreateCheckoutOfferInput = {
+  action: "START_CHECKOUT",
+  conversationId: "507f1f77bcf86cd799439011",
+  productId: "507f1f77bcf86cd799439012",
 };
 
 const sampleOffer = (status: Offer["status"] = "created"): Offer => ({
@@ -117,6 +130,22 @@ test("server-side proposal uses product price instead of client-supplied price",
   assert.equal(proposal.orderValue, 69999);
 });
 
+test("checkout offer validation rejects client amount override", () => {
+  const unsafeBody = {
+    ...checkoutOfferInput,
+    finalAmount: 1,
+    orderValue: 1,
+    approvedDiscountPercent: 99,
+  };
+  const parsed = createCheckoutOfferSchema.safeParse(unsafeBody);
+  const proposal = createPolicyProposalFromProductPrice(checkoutOfferInput, 69999);
+
+  assert.equal(parsed.success, false);
+  assert.equal(proposal.action, "START_CHECKOUT");
+  assert.equal(proposal.orderValue, 69999);
+  assert.equal(proposal.requestedDiscountPercent, undefined);
+});
+
 test("discount arithmetic is paise-safe", () => {
   const originalAmount = rupeesToPaise(69999);
   const amounts = calculateDiscountAmounts(originalAmount, 10);
@@ -128,6 +157,13 @@ test("discount arithmetic is paise-safe", () => {
 
 test("duplicate creation key is stable", () => {
   assert.equal(buildExecutionKey(offerInput), buildExecutionKey({ ...offerInput }));
+});
+
+test("checkout creation key is stable without a discount percent", () => {
+  assert.equal(
+    buildExecutionKey(checkoutOfferInput),
+    buildExecutionKey({ ...checkoutOfferInput }),
+  );
 });
 
 test("expired offer cannot be accepted", () => {

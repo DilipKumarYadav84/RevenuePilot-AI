@@ -1,9 +1,10 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+﻿import { type FormEvent, useEffect, useCallback, useState } from "react";
 
 import { getConversationAudit } from "../../services/audit.service";
 import { getDashboardSummary } from "../../services/dashboard.service";
 import { getPolicy, updatePolicy } from "../../services/policy.service";
-import type { AuditEvent, AuditEventType } from "../../types/audit";
+import { AuditTimeline } from "../common/AuditTimeline";
+import type { AuditEvent } from "../../types/audit";
 import type {
   DashboardConversationSummary,
   DashboardSummary,
@@ -28,52 +29,19 @@ type PolicyFormState = {
 
 const sectionLabels: Record<DashboardSection, string> = {
   overview: "Overview",
-  conversations: "Live Conversations",
+  conversations: "Live conversations",
   offers: "Offers",
-  payments: "Payments",
+  payments: "Razorpay payments",
   policy: "Policy",
-  audit: "Audit Trail",
-};
-
-const eventLabels: Record<AuditEventType, string> = {
-  CONVERSATION_STARTED: "Conversation started",
-  CUSTOMER_MESSAGE_RECEIVED: "Customer message received",
-  ASSISTANT_MESSAGE_CREATED: "Assistant response created",
-  INTENT_DETECTED: "AI understood customer intent",
-  CUSTOMER_STATE_UPDATED: "Customer state updated",
-  CATALOG_SEARCHED: "Catalog searched",
-  PRODUCT_RECOMMENDED: "Product recommended",
-  ACTION_PROPOSED: "AI proposed an action",
-  POLICY_APPROVED: "Merchant policy approved AI action",
-  POLICY_MODIFIED: "Merchant policy modified AI action",
-  POLICY_BLOCKED: "Merchant policy blocked AI action",
-  POLICY_REQUIRES_APPROVAL: "Merchant policy requires approval",
-  OFFER_CREATED: "Offer created",
-  OFFER_ACCEPTED: "Customer accepted offer",
-  OFFER_REJECTED: "Customer rejected offer",
-  OFFER_EXPIRED: "Offer expired",
-  RAZORPAY_ORDER_CREATED: "Razorpay order created",
-  PAYMENT_VERIFICATION_SUCCEEDED: "Payment verified",
-  PAYMENT_VERIFICATION_FAILED: "Payment verification failed",
-};
-
-const actorIcons: Record<string, string> = {
-  customer: "C",
-  assistant: "A",
-  ai: "AI",
-  catalog: "P",
-  policy_engine: "G",
-  system: "S",
-  merchant: "M",
-  payment: "R",
+  audit: "Audit trail",
 };
 
 const stateLabels: Record<string, string> = {
-  browsing: "Browsing",
-  comparing: "Comparing",
+  browsing: "Exploring options",
+  comparing: "Comparing options",
   hesitating: "Considering value",
-  ready_to_buy: "Ready to buy",
-  unknown: "Unknown",
+  ready_to_buy: "Ready to purchase",
+  unknown: "Not set",
 };
 
 const toPolicyFormState = (policy: MerchantPolicy): PolicyFormState => ({
@@ -92,6 +60,14 @@ const shortId = (value: string): string => `${value.slice(0, 6)}...${value.slice
 
 const formatDate = (value?: string): string =>
   value ? new Date(value).toLocaleString() : "Not available";
+
+const previewText = (value: string | null, maxLength = 96): string => {
+  if (!value) {
+    return "Conversation started";
+  }
+
+  return value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
+};
 
 const conversionRate = (value: number, base: number): string => {
   if (base <= 0) {
@@ -149,28 +125,6 @@ const validatePolicyForm = (form: PolicyFormState): string | null => {
   return null;
 };
 
-const getPolicyStory = (events: AuditEvent[]): string | null => {
-  const modified = events.find((event) => event.eventType === "POLICY_MODIFIED");
-  const proposed = events.find((event) => event.eventType === "ACTION_PROPOSED");
-
-  if (!modified) {
-    return null;
-  }
-
-  const requested = proposed?.output?.requestedDiscountPercent;
-  const approved = modified.output?.approvedAction;
-  const approvedPercent =
-    typeof approved === "object" &&
-    approved !== null &&
-    "approvedDiscountPercent" in approved
-      ? approved.approvedDiscountPercent
-      : undefined;
-
-  return `AI proposal ${typeof requested === "number" ? `${requested}%` : "reviewed"} -> merchant guardrail -> approved offer ${
-    typeof approvedPercent === "number" ? `${approvedPercent}%` : "capped"
-  }. ${modified.reason ?? ""}`.trim();
-};
-
 export const MerchantConsole = () => {
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -178,52 +132,32 @@ export const MerchantConsole = () => {
   const [policyForm, setPolicyForm] = useState<PolicyFormState | null>(null);
   const [selectedConversation, setSelectedConversation] =
     useState<DashboardConversationSummary | null>(null);
-  const [conversationAudit, setConversationAudit] = useState<AuditEvent[]>([]);
+  const [auditResult, setAuditResult] = useState<{ id: string; events: AuditEvent[]; error: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [policyMessage, setPolicyMessage] = useState<string | null>(null);
-  // Buildathon-demo-only: held in memory for this session only, never
-  // persisted (no localStorage), never read from a bundled env var, and
-  // never sent anywhere except the PATCH /api/policies request below. This
-  // is NOT production auth — see backend/src/middleware/merchantAuth.middleware.ts.
   const [merchantKeyInput, setMerchantKeyInput] = useState("");
 
-  const refresh = async () => {
-    setLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const [nextSummary, nextPolicy] = await Promise.all([
-        getDashboardSummary(),
-        getPolicy(),
-      ]);
+  const refresh = useCallback(() => Promise.all([getDashboardSummary(), getPolicy()])
+    .then(([nextSummary, nextPolicy]) => {
+      setErrorMessage(null);
       setSummary(nextSummary);
       setPolicy(nextPolicy);
       setPolicyForm(toPolicyFormState(nextPolicy));
-      setSelectedConversation((current) =>
-        current
-          ? nextSummary.recentConversations.find((item) => item.id === current.id) ?? current
-          : nextSummary.recentConversations[0] ?? null,
-      );
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Merchant dashboard could not be loaded.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+      setSelectedConversation(current => current
+        ? nextSummary.recentConversations.find(item => item.id === current.id) ?? current
+        : nextSummary.recentConversations[0] ?? null);
+    })
+    .catch(() => setErrorMessage("Merchant dashboard could not be loaded. Refresh to retry."))
+    .finally(() => setLoading(false)), []);
 
   useEffect(() => {
     void refresh();
-  }, []);
+  }, [refresh]);
 
   useEffect(() => {
     if (!selectedConversation) {
-      setConversationAudit([]);
       return;
     }
 
@@ -231,26 +165,17 @@ export const MerchantConsole = () => {
     getConversationAudit(selectedConversation.id)
       .then((events) => {
         if (active) {
-          setConversationAudit(events);
+          setAuditResult({ id: selectedConversation.id, events, error: false });
         }
       })
-      .catch((error: unknown) => {
-        if (active) {
-          setErrorMessage(
-            error instanceof Error ? error.message : "Audit trail could not be loaded.",
-          );
-        }
+      .catch(() => {
+        if (active) setAuditResult({ id: selectedConversation.id, events: [], error: true });
       });
 
     return () => {
       active = false;
     };
   }, [selectedConversation]);
-
-  const policyStory = useMemo(
-    () => getPolicyStory(conversationAudit),
-    [conversationAudit],
-  );
 
   const handlePolicySave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -276,11 +201,11 @@ export const MerchantConsole = () => {
       );
       setPolicy(updatedPolicy);
       setPolicyForm(toPolicyFormState(updatedPolicy));
-      setPolicyMessage("Policy saved. Backend validation accepted the update.");
+      setPolicyMessage("Merchant policy saved. New decisions will use these rules.");
       await refresh();
-    } catch (error) {
+    } catch {
       setPolicyMessage(
-        error instanceof Error ? error.message : "Policy update failed.",
+        "Policy update failed.",
       );
     } finally {
       setSavingPolicy(false);
@@ -289,19 +214,25 @@ export const MerchantConsole = () => {
 
   if (loading && !summary) {
     return (
-      <section className="merchant-console loading-panel">
+      <section className="merchant-console loading-panel" role="status">
         <p>Loading merchant intelligence...</p>
       </section>
     );
   }
 
   return (
-    <section className="merchant-console" aria-labelledby="merchant-title">
+    <section
+      className="merchant-console"
+      aria-labelledby="merchant-title"
+    >
       <aside className="merchant-sidebar" aria-label="Merchant console sections">
-        <div>
-          <p className="eyebrow">Merchant Console</p>
-          <h1 id="merchant-title">TechNova Intelligence</h1>
-          <span className="mode-pill">Razorpay Test Mode</span>
+        <div className="merchant-brand-card">
+          <div className="merchant-badge-row">
+            <span className="mode-pill-accent">Merchant workspace</span>
+            <span className="mode-pill">Test Mode</span>
+          </div>
+          <p className="eyebrow">Merchant Control Tower</p>
+          <h1 id="merchant-title">Merchant Console</h1>
         </div>
         <nav>
           {(Object.keys(sectionLabels) as DashboardSection[]).map((section) => (
@@ -309,14 +240,20 @@ export const MerchantConsole = () => {
               key={section}
               type="button"
               className={activeSection === section ? "active" : ""}
+              aria-current={activeSection === section ? "page" : undefined}
               onClick={() => setActiveSection(section)}
             >
               {sectionLabels[section]}
             </button>
           ))}
         </nav>
-        <button type="button" className="secondary-action" onClick={() => void refresh()}>
-          Refresh
+        <button type="button" className="secondary-action refresh-btn" disabled={loading} onClick={() => { setLoading(true); void refresh(); }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M23 4v6h-6" />
+            <path d="M1 20v-6h6" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </svg>
+          {loading ? "Refreshing..." : "Refresh data"}
         </button>
       </aside>
 
@@ -330,21 +267,30 @@ export const MerchantConsole = () => {
         {summary && (
           <>
             <section className="kpi-grid" aria-label="Merchant KPIs">
-              <article>
-                <span>AI-assisted Revenue - Test Mode</span>
+              <article className="kpi-card revenue">
+                <span className="kpi-label">Verified Test Revenue</span>
                 <strong>{formatPaiseAsInr(summary.metrics.verifiedRevenue)}</strong>
+                <span className="kpi-subtitle">Server verified</span>
               </article>
-              <article>
-                <span>Verified payments</span>
-                <strong>{summary.metrics.verifiedPayments}</strong>
-              </article>
-              <article>
-                <span>Active conversations</span>
+              <article className="kpi-card">
+                <span className="kpi-label">Active Conversations</span>
                 <strong>{summary.metrics.activeConversations}</strong>
+                <span className="kpi-subtitle">Active in the last 24 hours</span>
               </article>
-              <article>
-                <span>Policy interventions</span>
+              <article className="kpi-card">
+                <span className="kpi-label">Offers Created</span>
+                <strong>{summary.metrics.offersCreated}</strong>
+                <span className="kpi-subtitle">Discount offer records</span>
+              </article>
+              <article className="kpi-card">
+                <span className="kpi-label">Policy Interventions</span>
                 <strong>{summary.metrics.policyInterventions}</strong>
+                <span className="kpi-subtitle">Capped, blocked or held events</span>
+              </article>
+              <article className="kpi-card">
+                <span className="kpi-label">Verified Payments</span>
+                <strong>{summary.metrics.verifiedPayments}</strong>
+                <span className="kpi-subtitle">Server verified</span>
               </article>
             </section>
 
@@ -353,17 +299,18 @@ export const MerchantConsole = () => {
                 <article className="merchant-card">
                   <div className="panel-heading compact">
                     <div>
-                      <p className="eyebrow">Funnel</p>
-                      <h2>AI commerce conversion</h2>
+                      <p className="eyebrow">Journey milestones</p>
+                      <h2>AI Commerce Conversion</h2>
                     </div>
                   </div>
+                  <p className="hint">Unique conversations at each stage, across all journeys. Checkout includes full-price purchases.</p>
                   <div className="funnel-list">
                     {[
                       ["Conversations", summary.funnel.conversations],
-                      ["Recommendations", summary.funnel.recommendations],
-                      ["Offers", summary.funnel.offers],
-                      ["Accepted offers", summary.funnel.acceptedOffers],
-                      ["Verified payments", summary.funnel.verifiedPayments],
+                      ["Recommended", summary.funnel.recommendations],
+                      ["Offer created", summary.funnel.offers],
+                      ["Offer accepted", summary.funnel.acceptedOffers],
+                      ["Payment verified", summary.funnel.verifiedPayments],
                     ].map(([label, value]) => {
                       const count = Number(value);
                       return (
@@ -376,7 +323,7 @@ export const MerchantConsole = () => {
                             <span
                               style={{
                                 width: `${Math.max(
-                                  4,
+                                  0,
                                   Math.min(
                                     100,
                                     summary.funnel.conversations
@@ -392,6 +339,7 @@ export const MerchantConsole = () => {
                       );
                     })}
                   </div>
+                  <p className="hint">Stages are independent milestones. Direct purchases can skip incentives; older test records may have missing earlier stages.</p>
                 </article>
 
                 <article className="merchant-card">
@@ -403,7 +351,7 @@ export const MerchantConsole = () => {
                   </div>
                   <div className="conversation-list">
                     {summary.recentConversations.length === 0 ? (
-                      <p className="empty-copy">No recent conversations yet.</p>
+                      <p className="empty-copy">Start a shopper journey to see recommendations.</p>
                     ) : (
                       summary.recentConversations.map((conversation) => (
                         <button
@@ -412,9 +360,10 @@ export const MerchantConsole = () => {
                           className={
                             selectedConversation?.id === conversation.id ? "selected" : ""
                           }
-                          onClick={() => setSelectedConversation(conversation)}
+                          aria-pressed={selectedConversation?.id === conversation.id}
+                          onClick={() => { setSelectedConversation(conversation); setActiveSection("audit"); }}
                         >
-                          <strong>{conversation.customerNeed ?? "Conversation started"}</strong>
+                          <strong>{previewText(conversation.customerNeed)}</strong>
                           <span>
                             {conversation.context.category ?? "Unknown category"} /{" "}
                             {stateLabels[conversation.context.customerState ?? "unknown"]}
@@ -428,35 +377,18 @@ export const MerchantConsole = () => {
               </section>
             )}
 
-            {(activeSection === "overview" || activeSection === "policy") && policy && policyForm && (
+            {activeSection === "policy" && policy && policyForm && (
               <section className="merchant-grid">
                 <article className="merchant-card">
                   <div className="panel-heading compact">
                     <div>
-                      <p className="eyebrow">Policy impact</p>
-                      <h2>Merchant guardrails</h2>
-                    </div>
-                  </div>
-                  <dl className="policy-readout">
-                    <div><dt>Maximum discount</dt><dd>{policy.maxDiscountPercent}%</dd></div>
-                    <div><dt>Approval threshold</dt><dd>{policy.approvalThresholdPercent}%</dd></div>
-                    <div><dt>Maximum offers per conversation</dt><dd>{policy.maximumOffersPerConversation}</dd></div>
-                    <div><dt>Offer expiry</dt><dd>{policy.offerExpiryMinutes} min</dd></div>
-                    <div><dt>Discounts</dt><dd>{policy.allowDiscounts ? "Enabled" : "Disabled"}</dd></div>
-                    <div><dt>Checkout</dt><dd>{policy.allowCheckout ? "Enabled" : "Disabled"}</dd></div>
-                  </dl>
-                </article>
-
-                <article className="merchant-card">
-                  <div className="panel-heading compact">
-                    <div>
                       <p className="eyebrow">Controls</p>
-                      <h2>Update safe policy fields</h2>
+                      <h2>Merchant guardrails</h2>
                     </div>
                   </div>
                   <form className="policy-form" onSubmit={handlePolicySave}>
                     <label>
-                      Maximum discount
+                      Maximum discount (%)
                       <input
                         type="number"
                         min="0"
@@ -468,7 +400,7 @@ export const MerchantConsole = () => {
                       />
                     </label>
                     <label>
-                      Approval threshold
+                      Approval threshold (%)
                       <input
                         type="number"
                         min="0"
@@ -480,7 +412,7 @@ export const MerchantConsole = () => {
                       />
                     </label>
                     <label>
-                      Minimum order amount
+                      Minimum order amount (₹)
                       <input
                         type="number"
                         min="0"
@@ -491,7 +423,7 @@ export const MerchantConsole = () => {
                       />
                     </label>
                     <label>
-                      Max offers per conversation
+                      Offers per conversation
                       <input
                         type="number"
                         min="0"
@@ -503,7 +435,7 @@ export const MerchantConsole = () => {
                       />
                     </label>
                     <label>
-                      Offer expiry minutes
+                      Offer expiry (min)
                       <input
                         type="number"
                         min="1"
@@ -534,26 +466,21 @@ export const MerchantConsole = () => {
                         {label}
                       </label>
                     ))}
-                    <p>
-                      RevenuePilot can propose discounts, but these values decide
-                      what the merchant policy can approve or constrain.
+                    <p className="policy-explanation">
+                      RevenuePilot AI can propose commercial offers, but these exact rules deterministically govern what becomes executable.
                     </p>
                     <label>
-                      Merchant admin key (Buildathon demo only — not stored, not
-                      part of the customer app)
+                      Merchant admin key
                       <input
                         type="password"
                         autoComplete="off"
-                        placeholder="x-merchant-key"
+                        placeholder="Required to save changes"
                         value={merchantKeyInput}
                         onChange={(event) => setMerchantKeyInput(event.target.value)}
                       />
                     </label>
                     <p className="hint">
-                      This key is required by the backend to save policy changes.
-                      It is held only in this browser tab's memory for this
-                      session and is never bundled into the app or written to
-                      storage — see MERCHANT_ADMIN_KEY in backend/.env.example.
+                      Required to update merchant policy. Stored only for this browser session.
                     </p>
                     {policyMessage && <div className="notice info">{policyMessage}</div>}
                     <button type="submit" disabled={savingPolicy}>
@@ -564,7 +491,7 @@ export const MerchantConsole = () => {
               </section>
             )}
 
-            {(activeSection === "overview" || activeSection === "audit") && (
+            {activeSection === "audit" && (
               <section className="merchant-grid">
                 <article className="merchant-card">
                   <div className="panel-heading compact">
@@ -584,7 +511,7 @@ export const MerchantConsole = () => {
                   ) : (
                     <p className="empty-copy">No conversation selected.</p>
                   )}
-                  {policyStory && <div className="policy-story">{policyStory}</div>}
+
                 </article>
 
                 <article className="merchant-card">
@@ -594,47 +521,37 @@ export const MerchantConsole = () => {
                       <h2>Explainable timeline</h2>
                     </div>
                   </div>
-                  <div className="audit-timeline">
-                    {(conversationAudit.length > 0 ? conversationAudit : summary.recentAuditEvents).length === 0 ? (
-                      <p className="empty-copy">No audit events yet.</p>
-                    ) : (
-                      (conversationAudit.length > 0 ? conversationAudit : summary.recentAuditEvents).map((event, index) => (
-                        <article key={`${event.eventType}-${event.createdAt ?? index}`}>
-                          <span className="actor-badge">{actorIcons[event.actor] ?? "E"}</span>
-                          <div>
-                            <strong>{eventLabels[event.eventType]}</strong>
-                            <small>{event.eventType} / {event.actor}</small>
-                            <p>{event.reason ?? event.summary}</p>
-                          </div>
-                        </article>
-                      ))
-                    )}
-                  </div>
+                  <AuditTimeline events={selectedConversation ? (auditResult?.id === selectedConversation.id ? auditResult.events : []) : summary.recentAuditEvents}
+                    loading={Boolean(selectedConversation && auditResult?.id !== selectedConversation.id)}
+                    error={Boolean(selectedConversation && auditResult?.id === selectedConversation.id && auditResult.error)} />
                 </article>
               </section>
             )}
 
-            {(activeSection === "overview" || activeSection === "offers") && (
+            {activeSection === "offers" && (
               <article className="merchant-card">
                 <div className="panel-heading compact">
                   <div>
                     <p className="eyebrow">Offers</p>
-                    <h2>Policy-controlled incentives</h2>
+                    <h2>Policy-Controlled Incentives</h2>
                   </div>
                 </div>
                 <div className="data-list">
                   {summary.recentOffers.length === 0 ? (
-                    <p className="empty-copy">No active offers.</p>
+                    <p className="empty-copy">Merchant-approved incentives will appear here.</p>
                   ) : (
                     summary.recentOffers.map((offer) => (
-                      <div key={offer.id}>
-                        <strong>{shortId(offer.productId)}</strong>
-                        <span>
-                          {offer.requestedDiscountPercent}% requested to{" "}
-                          {offer.approvedDiscountPercent}% approved
+                      <div key={offer.id} className="offer-row-item">
+                        <div>
+                          <strong>{shortId(offer.productId)}</strong>
+                          <span className="offer-discount-tag">
+                            {offer.requestedDiscountPercent}% req → {offer.approvedDiscountPercent}% app
+                          </span>
+                        </div>
+                        <span className={`status-chip ${offer.policyDecision.toLowerCase()}`}>
+                          {offer.policyDecision} / {offer.status}
                         </span>
-                        <span>{offer.policyDecision} / {offer.status}</span>
-                        <span>{formatPaiseAsInr(offer.finalAmount)}</span>
+                        <strong className="offer-price-val">{formatPaiseAsInr(offer.finalAmount)}</strong>
                       </div>
                     ))
                   )}
@@ -642,27 +559,41 @@ export const MerchantConsole = () => {
               </article>
             )}
 
-            {(activeSection === "overview" || activeSection === "payments") && (
+            {activeSection === "payments" && (
               <article className="merchant-card">
                 <div className="panel-heading compact">
                   <div>
                     <p className="eyebrow">Payments</p>
-                    <h2>Backend-verified checkout</h2>
+                    <h2>Razorpay payment ledger</h2>
                   </div>
                   <span className="status-chip success">
-                    {summary.metrics.verifiedPayments} / {summary.recentPayments.length} verified
+                    {summary.recentPayments.filter(payment => payment.status === "verified").length} of {summary.recentPayments.length} shown verified
                   </span>
+                </div>
+                <div className="crypto-verification-banner">
+                  <div className="crypto-banner-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <strong>Server-Side Verification Active</strong>
+                    <p>Only payments marked verified have passed server verification. Pending and failed attempts are shown with their actual status.</p>
+                  </div>
                 </div>
                 <div className="data-list">
                   {summary.recentPayments.length === 0 ? (
-                    <p className="empty-copy">No verified payments yet.</p>
+                    <p className="empty-copy">Verified Razorpay Test Mode payments will appear here.</p>
                   ) : (
                     summary.recentPayments.map((payment) => (
-                      <div key={payment.id}>
-                        <strong>{shortId(payment.id)}</strong>
-                        <span>{formatPaiseAsInr(payment.amount)}</span>
-                        <span>{payment.status}</span>
-                        <span>{payment.razorpayOrderId}</span>
+                      <div key={payment.id} className="payment-row-item">
+                        <div>
+                          <strong>{shortId(payment.id)}</strong>
+                          <span className="payment-order-id">{payment.razorpayOrderId}</span>
+                        </div>
+                        <span className={`status-chip ${payment.status === "verified" ? "success" : payment.status === "verification_failed" ? "danger" : "waiting"}`}>{payment.status.toUpperCase()}</span>
+                        <strong className="payment-amount-val">{formatPaiseAsInr(payment.amount)}</strong>
                       </div>
                     ))
                   )}
@@ -676,7 +607,7 @@ export const MerchantConsole = () => {
                   <div className="panel-heading compact">
                     <div>
                       <p className="eyebrow">Recommendations</p>
-                      <h2>Top recommended products</h2>
+                      <h2>Frequently recommended</h2>
                     </div>
                   </div>
                   <div className="data-list compact-list">
@@ -686,7 +617,7 @@ export const MerchantConsole = () => {
                       summary.topRecommendedProducts.map((product) => (
                         <div key={product.name}>
                           <strong>{product.name}</strong>
-                          <span>{product.count} recommendations</span>
+                          <span>{product.count} events in recent sample</span>
                         </div>
                       ))
                     )}
@@ -696,7 +627,7 @@ export const MerchantConsole = () => {
                   <div className="panel-heading compact">
                     <div>
                       <p className="eyebrow">Customer states</p>
-                      <h2>Current journey posture</h2>
+                      <h2>Recent customer states</h2>
                     </div>
                   </div>
                   <div className="data-list compact-list">

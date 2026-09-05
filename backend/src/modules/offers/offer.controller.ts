@@ -3,12 +3,13 @@ import type { ZodError } from "zod";
 
 import {
   acceptOffer,
+  createCheckoutOffer,
   createDiscountOffer,
   getOfferById,
   getOffersForConversation,
   rejectOffer,
 } from "./offer.service";
-import { createOfferSchema, mongoIdSchema } from "./offer.validation";
+import { createCheckoutOfferSchema, createOfferSchema, mongoIdSchema } from "./offer.validation";
 
 class OfferValidationError extends Error {
   statusCode = 400;
@@ -32,6 +33,19 @@ export const createOfferController = async (
 ): Promise<void> => {
   const input = validateRequest(createOfferSchema, req.body);
   const result = await createDiscountOffer(input);
+
+  res.status(result.executed ? 201 : 200).json({
+    success: true,
+    data: result,
+  });
+};
+
+export const createCheckoutOfferController = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const input = validateRequest(createCheckoutOfferSchema, req.body);
+  const result = await createCheckoutOffer(input);
 
   res.status(result.executed ? 201 : 200).json({
     success: true,

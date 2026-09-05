@@ -87,8 +87,8 @@ export class PolicyUpdateValidationError extends Error {
  * Pure merge + validation step for a merchant policy update, kept
  * standalone (no DB access) so it is directly unit-testable. Merges the
  * update onto the existing policy and enforces business invariants against
- * the fully-merged result — not just fields present together in a single
- * request — so e.g. a PATCH that only raises approvalThresholdPercent to
+ * the fully-merged result - not just fields present together in a single
+ * request - so e.g. a PATCH that only raises approvalThresholdPercent to
  * meet the existing maxDiscountPercent is caught too.
  */
 export const computeUpdatedMerchantPolicy = (

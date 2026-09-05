@@ -9,7 +9,7 @@ const offerSchema = new Schema<Offer>(
     actionType: {
       type: String,
       required: true,
-      enum: ["CREATE_DISCOUNT"],
+      enum: ["CREATE_DISCOUNT", "START_CHECKOUT"],
     },
     requestedDiscountPercent: { type: Number, required: true, min: 0, max: 100 },
     approvedDiscountPercent: { type: Number, required: true, min: 0, max: 100 },

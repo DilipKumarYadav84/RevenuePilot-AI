@@ -3,14 +3,14 @@ import mongoose from "mongoose";
 import { connectDatabase } from "../src/config/db";
 import { ProductModel, type Product } from "../src/modules/products/product.model";
 
-const brand = "TechNova";
+export const brand = "TechNova";
 
 const imageFor = (slug: string): string =>
   `https://placehold.co/900x600?text=${encodeURIComponent(slug)}`;
 
 const product = (data: Product): Product => data;
 
-const products: Product[] = [
+export const products: Product[] = [
   product({
     name: "DevBook Air 14",
     slug: "devbook-air-14",
@@ -469,7 +469,7 @@ const products: Product[] = [
   }),
 ];
 
-const seedProducts = async (): Promise<void> => {
+export const seedProducts = async (): Promise<void> => {
   try {
     await connectDatabase();
 
@@ -489,4 +489,6 @@ const seedProducts = async (): Promise<void> => {
   }
 };
 
-void seedProducts();
+if (require.main === module) {
+  void seedProducts();
+}

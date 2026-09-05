@@ -1,4 +1,4 @@
-import { env } from "../../config/env";
+﻿import { env } from "../../config/env";
 import { structuredIntentSchema } from "./ai.schemas";
 import type {
   AIProvider,
@@ -15,7 +15,11 @@ export class AIProviderError extends Error {
 }
 
 const formatPrice = (price: number): string =>
-  `Rs. ${new Intl.NumberFormat("en-IN").format(price)}`;
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(price);
 
 const getSpec = (
   specifications: Record<string, string>,
@@ -24,6 +28,7 @@ const getSpec = (
 
 const buildGroundedResponse = ({
   catalogResults,
+  latestCustomerMessage,
 }: AssistantResponseInput): string => {
   if (catalogResults.length === 0) {
     return "I could not find a suitable active TechNova product for that request. You can adjust the budget, category, or priority and I can try again.";
@@ -37,11 +42,10 @@ const buildGroundedResponse = ({
   }
 
   const topFacts = [
-    getSpec(topResult.specifications, "processor"),
-    getSpec(topResult.specifications, "graphics"),
     getSpec(topResult.specifications, "ram"),
     getSpec(topResult.specifications, "battery"),
-  ].filter(Boolean);
+    getSpec(topResult.specifications, "graphics"),
+  ].filter(Boolean).slice(0, 2);
 
   const responseParts = [
     `The ${topResult.name} is the strongest catalog match at ${formatPrice(
@@ -50,14 +54,10 @@ const buildGroundedResponse = ({
   ];
 
   if (topFacts.length > 0) {
-    responseParts.push(`Key fit: ${topFacts.join(", ")}.`);
+    responseParts.push(`It offers ${topFacts.join(" and ")}.`);
   }
 
-  if (topResult.matchReasons.length > 0) {
-    responseParts.push(`Why it matched: ${topResult.matchReasons.join("; ")}.`);
-  }
-
-  if (secondResult) {
+  if (secondResult && /compar|alternative/i.test(latestCustomerMessage ?? "")) {
     responseParts.push(
       `A useful alternative is ${secondResult.name} at ${formatPrice(
         secondResult.price,

@@ -1,0 +1,54 @@
+const { chromium } = require('C:/Users/HP/AppData/Local/npm-cache/_npx/e41f203b7505f1fb/node_modules/playwright');
+const fs = require('node:fs');
+(async()=>{
+  const browser=await chromium.launch({headless:true});
+  const page=await browser.newPage({viewport:{width:1366,height:900}});
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('http://localhost:5173');
+  const send=async text=>{
+    await page.getByLabel('Message RevenuePilot AI',{exact:true}).fill(text);
+    await page.getByRole('button',{name:'Send',exact:true}).click();
+    await page.getByLabel('Message RevenuePilot AI',{exact:true}).waitFor({state:'visible'});
+    await page.waitForFunction(()=>!document.querySelector('textarea').disabled,{},{timeout:90000});
+  };
+  await send('I need a laptop for AI development under INR 70,000');
+  console.log('Discovery:', await page.locator('.recommendation-title-row strong').allTextContents());
+  await page.screenshot({path:'qa/discovery-1366.png',fullPage:true});
+  await send('DevBook Air 14 is so expensive but I really like it');
+  if (await page.locator('.product-detail h2').innerText() !== 'DevBook Air 14') throw new Error('Focused product mismatch'); console.log('Focused product: DevBook Air 14');
+  console.log('Offer:',await page.locator('.selected-offer-summary').innerText());
+  await page.getByRole('button',{name:'Accept 10% offer',exact:true}).waitFor();
+  await page.screenshot({path:'qa/offer-1366.png',fullPage:true});
+  await page.getByRole('button',{name:'Policy trace',exact:true}).click();
+  await page.getByRole('dialog',{name:'Policy trace',exact:true}).waitFor();
+  await page.screenshot({path:'qa/policy-trace-1366.png',fullPage:true});
+  await page.keyboard.press('Escape');
+  console.log('Trace closed:',await page.getByRole('dialog').count()===0);
+  await page.getByRole('button',{name:'Accept 10% offer',exact:true}).click();
+  await page.getByRole('button',{name:'Pay securely with Razorpay',exact:true}).waitFor();
+  console.log('Offer acceptance passed');
+  await page.getByRole('button',{name:'Razorpay Test Mode Helper',exact:true}).click();
+  await page.getByRole('dialog').waitFor();
+  await page.setViewportSize({width:375,height:900});
+  await page.screenshot({path:'qa/helper-375.png',fullPage:true});
+  console.log('Mobile modal overflow:',await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth));
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({width:1366,height:900});
+  await page.getByRole('button',{name:'Pay securely with Razorpay',exact:true}).click();
+  await page.waitForTimeout(8000);
+  await page.screenshot({path:'qa/checkout-1366.png',fullPage:true});
+  console.log('Razorpay checkout frame present:',page.frames().some(f=>f.url().startsWith('https://api.razorpay.com/v1/checkout/public')));
+  console.log('App payment state:',await page.locator('.payment-card').innerText());
+  const gateway = page.frames().find(frame => frame.url().startsWith('https://api.razorpay.com/v1/checkout/public'));
+  if (gateway) {
+    await gateway.getByPlaceholder('Mobile number', {exact:true}).fill('9999999999');
+    await gateway.getByRole('button',{name:'Continue',exact:true}).click();
+    await page.waitForTimeout(1500);
+    await page.screenshot({path:'qa/gateway-contact.png',fullPage:true});
+    console.log('Gateway form:',(await gateway.locator('body').innerText()).slice(-2000));
+    console.log('Gateway inputs:',await gateway.locator('input').evaluateAll(inputs=>inputs.map(e=>({placeholder:e.placeholder,type:e.type,name:e.name}))));
+  }
+  console.log('Errors:',errors);
+  fs.writeFileSync('qa/checkout-dom.txt',await page.locator('body').innerText());
+  await browser.close();
+})().catch(error=>{console.error(error.message);process.exitCode=1;});

@@ -6,7 +6,6 @@ import {
 import { loadRazorpayScript } from "../services/razorpay-loader";
 import type { SafePaymentRecord } from "../types/payment";
 import type {
-  RazorpayFailureResponse,
   RazorpayOptions,
   RazorpaySuccessResponse,
 } from "../types/razorpay";
@@ -41,10 +40,6 @@ type CheckoutResult = {
 const buildIdempotencyKey = (offerId: string): string =>
   `rp_checkout_${offerId}`;
 
-const getFailureMessage = (response: RazorpayFailureResponse): string =>
-  response.error?.description ??
-  response.error?.reason ??
-  "Payment was not completed. You can retry securely.";
 
 export const useRazorpayCheckout = (): CheckoutResult => {
   const [state, setState] = useState<PaymentState>("idle");
@@ -120,11 +115,9 @@ export const useRazorpayCheckout = (): CheckoutResult => {
                 setVerifiedPayment(payment);
                 setState("verified");
               })
-              .catch((error: unknown) => {
+              .catch(() => {
                 setErrorMessage(
-                  error instanceof Error
-                    ? error.message
-                    : "Payment verification failed. Please retry.",
+                  "Payment verification failed. Please retry.",
                 );
                 setState("failed");
               })
@@ -144,18 +137,16 @@ export const useRazorpayCheckout = (): CheckoutResult => {
         };
 
         const checkout = new window.Razorpay(options);
-        checkout.on("payment.failed", (response) => {
-          setErrorMessage(getFailureMessage(response));
+        checkout.on("payment.failed", () => {
+          setErrorMessage("Payment was not completed. You can retry securely.");
           setState("failed");
           isBusyRef.current = false;
         });
         checkout.open();
         setState("checkout_open");
-      } catch (error) {
+      } catch {
         setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Checkout could not be started. Please retry.",
+          "Checkout could not be started. Please retry.",
         );
         setState("failed");
         isBusyRef.current = false;

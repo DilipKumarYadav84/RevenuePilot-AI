@@ -4,28 +4,20 @@ import test from "node:test";
 import {
   buildDashboardFunnel,
   calculateConversionRate,
+  getActiveConversationWindowStart,
   mapConversationSummary,
   mapDashboardAuditEvent,
   mapPaymentSummary,
 } from "../../src/modules/dashboard/dashboard.service";
 import type { AuditEvent } from "../../src/modules/audit/audit.types";
 import type { Conversation } from "../../src/modules/conversations/conversation.types";
-import type { DashboardMetrics } from "../../src/modules/dashboard/dashboard.types";
 import type { PaymentRecord } from "../../src/modules/payments/payment.types";
 
-const metrics: DashboardMetrics = {
-  activeConversations: 2,
-  totalConversations: 4,
-  recommendations: 3,
-  offersCreated: 2,
-  offersAccepted: 1,
-  verifiedPayments: 1,
-  verifiedRevenue: 6299910,
-  policyInterventions: 1,
-};
-
-test("dashboard funnel uses real aggregate counts", () => {
-  assert.deepEqual(buildDashboardFunnel(metrics), {
+test("dashboard funnel counts unique qualifying conversations, not repeated events", () => {
+  assert.deepEqual(buildDashboardFunnel({
+    conversations: ["a", "b", "c", "d"], recommendations: ["a", "a", "b", "c", "deleted"],
+    offers: ["a", "b", "b"], acceptedOffers: ["a", "a"], verifiedPayments: ["a", "a"],
+  }), {
     conversations: 4,
     recommendations: 3,
     offers: 2,
@@ -34,9 +26,38 @@ test("dashboard funnel uses real aggregate counts", () => {
   });
 });
 
+test("empty funnel excludes orphan events and payments", () => {
+  assert.deepEqual(buildDashboardFunnel({ conversations: [], recommendations: ["deleted"],
+    offers: ["deleted"], acceptedOffers: [], verifiedPayments: ["deleted"] }),
+  { conversations: 0, recommendations: 0, offers: 0, acceptedOffers: 0, verifiedPayments: 0 });
+});
+
+test("independent milestones preserve legacy gaps rather than inventing acceptance", () => {
+  const funnel = buildDashboardFunnel({ conversations: ["a", "b"], recommendations: ["a"],
+    offers: ["a"], acceptedOffers: [], verifiedPayments: ["a", "b"] });
+  assert.equal(funnel.acceptedOffers, 0);
+  assert.equal(funnel.verifiedPayments, 2);
+  assert.equal(calculateConversionRate(funnel.verifiedPayments, funnel.conversations), 100);
+});
+
+test("direct checkout records count toward offer and acceptance milestones", () => {
+  const funnel = buildDashboardFunnel({ conversations: ["direct", "discount"],
+    recommendations: ["direct", "discount"], offers: ["direct", "discount"],
+    acceptedOffers: ["direct"], verifiedPayments: ["direct"] });
+  assert.equal(funnel.offers, 2);
+  assert.equal(funnel.acceptedOffers, 1);
+});
+
 test("conversion rate handles empty funnels", () => {
   assert.equal(calculateConversionRate(1, 4), 25);
   assert.equal(calculateConversionRate(1, 0), 0);
+});
+
+test("active conversation window is recent and deterministic", () => {
+  assert.equal(
+    getActiveConversationWindowStart(new Date("2026-09-01T12:00:00.000Z")).toISOString(),
+    "2026-08-31T12:00:00.000Z",
+  );
 });
 
 test("payment summary exposes safe payment fields only", () => {

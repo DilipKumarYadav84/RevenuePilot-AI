@@ -1,0 +1,173 @@
+{
+  "results": [
+    {
+      "width": 375,
+      "mode": "Shopper Journey",
+      "pageWidth": 375,
+      "viewport": 375,
+      "overflow": []
+    },
+    {
+      "width": 375,
+      "mode": "Merchant Console",
+      "pageWidth": 375,
+      "viewport": 375,
+      "overflow": []
+    },
+    {
+      "width": 375,
+      "mode": "Director Dual-View",
+      "pageWidth": 375,
+      "viewport": 375,
+      "overflow": []
+    },
+    {
+      "width": 375,
+      "mode": "Scenario Playbook",
+      "pageWidth": 375,
+      "viewport": 375,
+      "overflow": []
+    },
+    {
+      "width": 430,
+      "mode": "Shopper Journey",
+      "pageWidth": 430,
+      "viewport": 430,
+      "overflow": []
+    },
+    {
+      "width": 430,
+      "mode": "Merchant Console",
+      "pageWidth": 430,
+      "viewport": 430,
+      "overflow": []
+    },
+    {
+      "width": 430,
+      "mode": "Director Dual-View",
+      "pageWidth": 430,
+      "viewport": 430,
+      "overflow": []
+    },
+    {
+      "width": 430,
+      "mode": "Scenario Playbook",
+      "pageWidth": 430,
+      "viewport": 430,
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "mode": "Shopper Journey",
+      "pageWidth": 768,
+      "viewport": 768,
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "mode": "Merchant Console",
+      "pageWidth": 768,
+      "viewport": 768,
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "mode": "Director Dual-View",
+      "pageWidth": 768,
+      "viewport": 768,
+      "overflow": []
+    },
+    {
+      "width": 768,
+      "mode": "Scenario Playbook",
+      "pageWidth": 768,
+      "viewport": 768,
+      "overflow": []
+    },
+    {
+      "width": 1024,
+      "mode": "Shopper Journey",
+      "pageWidth": 1024,
+      "viewport": 1024,
+      "overflow": []
+    },
+    {
+      "width": 1024,
+      "mode": "Merchant Console",
+      "pageWidth": 1024,
+      "viewport": 1024,
+      "overflow": []
+    },
+    {
+      "width": 1024,
+      "mode": "Director Dual-View",
+      "pageWidth": 1024,
+      "viewport": 1024,
+      "overflow": []
+    },
+    {
+      "width": 1024,
+      "mode": "Scenario Playbook",
+      "pageWidth": 1024,
+      "viewport": 1024,
+      "overflow": []
+    },
+    {
+      "width": 1366,
+      "mode": "Shopper Journey",
+      "pageWidth": 1366,
+      "viewport": 1366,
+      "overflow": []
+    },
+    {
+      "width": 1366,
+      "mode": "Merchant Console",
+      "pageWidth": 1366,
+      "viewport": 1366,
+      "overflow": []
+    },
+    {
+      "width": 1366,
+      "mode": "Director Dual-View",
+      "pageWidth": 1366,
+      "viewport": 1366,
+      "overflow": []
+    },
+    {
+      "width": 1366,
+      "mode": "Scenario Playbook",
+      "pageWidth": 1366,
+      "viewport": 1366,
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "mode": "Shopper Journey",
+      "pageWidth": 1440,
+      "viewport": 1440,
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "mode": "Merchant Console",
+      "pageWidth": 1440,
+      "viewport": 1440,
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "mode": "Director Dual-View",
+      "pageWidth": 1440,
+      "viewport": 1440,
+      "overflow": []
+    },
+    {
+      "width": 1440,
+      "mode": "Scenario Playbook",
+      "pageWidth": 1440,
+      "viewport": 1440,
+      "overflow": []
+    }
+  ],
+  "errors": []
+}

@@ -16,7 +16,7 @@ export type Offer = {
   _id?: string;
   conversationId: string;
   productId: string;
-  actionType: "CREATE_DISCOUNT";
+  actionType: "CREATE_DISCOUNT" | "START_CHECKOUT";
   requestedDiscountPercent: number;
   approvedDiscountPercent: number;
   originalAmount: number;

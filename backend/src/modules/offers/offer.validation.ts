@@ -17,3 +17,12 @@ export const createOfferSchema = z
     idempotencyKey: z.string().trim().min(8).max(160).optional(),
   })
   .strict();
+
+export const createCheckoutOfferSchema = z
+  .object({
+    action: z.literal("START_CHECKOUT"),
+    conversationId: mongoIdSchema,
+    productId: mongoIdSchema,
+    idempotencyKey: z.string().trim().min(8).max(160).optional(),
+  })
+  .strict();

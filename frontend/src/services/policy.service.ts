@@ -7,7 +7,7 @@ export const getPolicy = (): Promise<MerchantPolicy> =>
 // merchantKey is a Buildathon-demo-only convenience: it is never read from
 // a bundled env var and never persisted (see MerchantConsole.tsx). It is
 // typed in by whoever is operating the merchant console for this session
-// and sent only on this request. Do NOT treat this as production auth —
+// and sent only on this request. Do NOT treat this as production auth -
 // the backend's requireMerchantKey middleware is the real (still
 // lightweight) protection; see backend/src/middleware/merchantAuth.middleware.ts.
 export const updatePolicy = (

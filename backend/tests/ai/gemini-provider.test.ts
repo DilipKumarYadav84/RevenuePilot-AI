@@ -527,7 +527,8 @@ test("Gemini compact recommendation prompt keeps only needed request, context, a
   assert.equal(parsed.catalogResults[0].tags, undefined);
   assert.equal(parsed.catalogResults[0].useCases, undefined);
   assert.equal(parsed.catalogResults[0].specifications.graphics, "NVIDIA RTX 4050");
-  assert.equal(parsed.catalogResults[0].matchReasons.length, 2);
+  assert.equal(parsed.catalogResults[0].matchReasons, undefined);
+  assert.equal(prompt.includes("priority preference match"), false);
   assert.equal(prompt.includes("ExtraBook 13"), false);
 });
 

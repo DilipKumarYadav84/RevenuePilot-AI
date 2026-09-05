@@ -1,10 +1,13 @@
-const inrFormatter = new Intl.NumberFormat("en-IN", {
+const formatInr = (amount: number): string =>
+  new Intl.NumberFormat("en-IN", {
   style: "currency",
   currency: "INR",
-});
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
 
 export const formatPaiseAsInr = (amountPaise: number): string =>
-  inrFormatter.format(amountPaise / 100);
+  formatInr(amountPaise / 100);
 
 export const formatRupeesAsInr = (amountRupees: number): string =>
-  inrFormatter.format(amountRupees);
+  formatInr(amountRupees);

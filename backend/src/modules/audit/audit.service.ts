@@ -89,9 +89,9 @@ export const getAuditEventsForConversation = async (
 
 export type MatchingActionProposalQuery = {
   conversationId: string;
-  action: "CREATE_DISCOUNT";
+  action: "CREATE_DISCOUNT" | "START_CHECKOUT";
   productId: string;
-  requestedDiscountPercent: number;
+  requestedDiscountPercent?: number;
 };
 
 /**
@@ -114,7 +114,8 @@ export const isMatchingActionProposalEvent = (
   return (
     output?.action === query.action &&
     output?.productId === query.productId &&
-    output?.requestedDiscountPercent === query.requestedDiscountPercent
+    (query.action === "START_CHECKOUT" ||
+      output?.requestedDiscountPercent === query.requestedDiscountPercent)
   );
 };
 

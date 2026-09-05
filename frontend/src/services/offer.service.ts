@@ -19,6 +19,21 @@ export const createOffer = (input: {
     }),
   });
 
+export const createCheckoutOffer = (input: {
+  conversationId: string;
+  productId: string;
+  idempotencyKey?: string;
+}): Promise<CreateOfferResult> =>
+  apiRequest<CreateOfferResult>("/api/offers/checkout", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "START_CHECKOUT",
+      conversationId: input.conversationId,
+      productId: input.productId,
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+    }),
+  });
+
 export const acceptOffer = (offerId: string): Promise<{
   offer: Offer;
   finalPayableAmount: number;

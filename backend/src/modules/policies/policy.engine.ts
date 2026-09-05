@@ -105,7 +105,7 @@ const evaluateDiscount = ({
   if (proposal.requestedDiscountPercent > policy.approvalThresholdPercent) {
     return requiresApproval(
       proposal,
-      `Discounts above ${policy.approvalThresholdPercent}% require human approval.`,
+      `Discounts above ${policy.approvalThresholdPercent}% are not executable automatically.`,
     );
   }
 

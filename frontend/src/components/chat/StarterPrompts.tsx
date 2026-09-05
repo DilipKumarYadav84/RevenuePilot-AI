@@ -1,5 +1,5 @@
-const prompts = [
-  "Find me an AI laptop under Rs. 70,000",
+﻿const prompts = [
+  "Find me an AI laptop under INR 70,000",
   "I need something portable for college",
   "Show me the best laptop for full-stack development",
 ];

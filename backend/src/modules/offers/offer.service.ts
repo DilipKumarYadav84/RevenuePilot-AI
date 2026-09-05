@@ -6,7 +6,7 @@ import { getActiveProductById } from "../products/product.service";
 import { evaluateActionProposal, getActiveMerchantPolicy } from "../policies/policy.service";
 import type { PolicyDecision } from "../policies/policy.types";
 import { OfferModel } from "./offer.model";
-import type { CreateOfferInput, Offer } from "./offer.types";
+import type { CreateCheckoutOfferInput, CreateOfferInput, Offer } from "./offer.types";
 
 export class OfferServiceError extends Error {
   statusCode: number;
@@ -41,12 +41,16 @@ export const isOfferExpired = (
   now = new Date(),
 ): boolean => offer.status === "created" && offer.expiresAt.getTime() <= now.getTime();
 
-export const buildExecutionKey = (input: CreateOfferInput): string => {
+type ExecutableOfferInput = CreateOfferInput | CreateCheckoutOfferInput;
+
+export const buildExecutionKey = (input: ExecutableOfferInput): string => {
   if (input.idempotencyKey) {
     return `offer:${input.idempotencyKey}`;
   }
 
-  const rawKey = `${input.action}:${input.conversationId}:${input.productId}:${input.requestedDiscountPercent}`;
+  const requestedDiscountPercent =
+    input.action === "CREATE_DISCOUNT" ? input.requestedDiscountPercent : "none";
+  const rawKey = `${input.action}:${input.conversationId}:${input.productId}:${requestedDiscountPercent}`;
   return `offer:${createHash("sha256").update(rawKey).digest("hex")}`;
 };
 
@@ -63,14 +67,15 @@ export const canCreateOfferFromPolicyDecision = (
 ): boolean => getApprovedDiscountPercent(decision) !== null;
 
 export const createPolicyProposalFromProductPrice = (
-  input: CreateOfferInput,
+  input: ExecutableOfferInput,
   productPrice: number,
 ): Parameters<typeof evaluateActionProposal>[0] => ({
   action: input.action,
   conversationId: input.conversationId,
   productId: input.productId,
   orderValue: productPrice,
-  requestedDiscountPercent: input.requestedDiscountPercent,
+  requestedDiscountPercent:
+    input.action === "CREATE_DISCOUNT" ? input.requestedDiscountPercent : undefined,
   reason: "Offer creation request evaluated by Policy Engine.",
 });
 
@@ -191,7 +196,7 @@ export const createDiscountOffer = async (
   // Provenance check: the discount request must trace back to a real
   // ACTION_PROPOSED audit event produced by the deterministic AI/policy
   // pipeline for this exact conversation, product, and discount percent.
-  // This does NOT make the audit event financially authoritative — the
+  // This does NOT make the audit event financially authoritative - the
   // Policy Engine below still re-evaluates from scratch, and the price
   // above was already loaded fresh from MongoDB. It only proves a real
   // conversation turn produced this proposal, closing the path where a
@@ -251,6 +256,111 @@ export const createDiscountOffer = async (
   const offerObject = offer.toObject();
 
   await createAuditEvent(createOfferCreatedAuditInput(offerObject));
+
+  return {
+    executed: true,
+    offer: offerObject,
+    policyDecision,
+  };
+};
+
+export const createCheckoutOffer = async (
+  input: CreateCheckoutOfferInput,
+): Promise<{
+  executed: boolean;
+  offer: Offer | null;
+  policyDecision: PolicyDecision;
+}> => {
+  const executionKey = buildExecutionKey(input);
+  const existingOffer = await OfferModel.findOne({ executionKey })
+    .lean<Offer>()
+    .exec();
+
+  if (existingOffer) {
+    return {
+      executed: true,
+      offer: existingOffer,
+      policyDecision: {
+        decision: existingOffer.policyDecision,
+        requestedAction: {
+          action: input.action,
+          conversationId: input.conversationId,
+          productId: input.productId,
+          orderValue: existingOffer.originalAmount / 100,
+        },
+        approvedAction: {
+          action: input.action,
+        },
+        reason: "Existing checkout intent returned for idempotent request.",
+        requiresHumanApproval: false,
+      },
+    };
+  }
+
+  const conversation = await getConversationById(input.conversationId);
+
+  if (!conversation) {
+    throw new OfferServiceError("Conversation not found", 404);
+  }
+
+  const product = await getActiveProductById(input.productId);
+
+  if (!product) {
+    throw new OfferServiceError("Active product not found", 404);
+  }
+
+  const matchingProposal = await findMatchingActionProposalEvent({
+    conversationId: input.conversationId,
+    action: input.action,
+    productId: input.productId,
+  });
+
+  if (!matchingProposal) {
+    throw new OfferServiceError(
+      "No matching AI-generated checkout proposal was found for this conversation and product.",
+      409,
+    );
+  }
+
+  const policyDecision = await evaluateActionProposal(
+    createPolicyProposalFromProductPrice(input, product.price),
+  );
+
+  if (policyDecision.decision !== "APPROVED") {
+    return {
+      executed: false,
+      offer: null,
+      policyDecision,
+    };
+  }
+
+  const policy = await getActiveMerchantPolicy();
+  const originalAmount = rupeesToPaise(product.price);
+  const expiresAt = new Date(Date.now() + policy.offerExpiryMinutes * 60 * 1000);
+  const offer = await OfferModel.create({
+    conversationId: input.conversationId,
+    productId: input.productId,
+    actionType: input.action,
+    requestedDiscountPercent: 0,
+    approvedDiscountPercent: 0,
+    originalAmount,
+    discountAmount: 0,
+    finalAmount: originalAmount,
+    currency: "INR",
+    amountUnit: "paise",
+    policyDecision: policyDecision.decision,
+    status: "accepted",
+    reason: policyDecision.reason,
+    expiresAt,
+    executionKey,
+  });
+  const offerObject = offer.toObject();
+
+  await createAuditEvent({
+    ...createOfferCreatedAuditInput(offerObject),
+    summary: "Checkout intent created.",
+  });
+  await createAuditEvent(createOfferAcceptedAuditInput(String(offerObject._id), offerObject));
 
   return {
     executed: true,

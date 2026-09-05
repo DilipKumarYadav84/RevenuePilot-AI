@@ -1,0 +1,7 @@
+{
+  "merchantChecks": 36,
+  "directorChecks": 6,
+  "replay": true,
+  "persistence": true,
+  "errors": []
+}

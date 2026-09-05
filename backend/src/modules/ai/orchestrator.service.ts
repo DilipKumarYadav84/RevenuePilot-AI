@@ -22,8 +22,13 @@ import type {
   OrchestratorResult,
   StructuredIntent,
 } from "./ai.types";
-import { mergeExtractedIntent } from "./intent.service";
-import { proposePolicyAction } from "./policy-proposal.service";
+import { extractIntentLocally, mergeExtractedIntent } from "./intent.service";
+import { getFocusedCatalogResult, proposePolicyAction } from "./policy-proposal.service";
+import { OfferModel } from "../offers/offer.model";
+import { PaymentModel } from "../payments/payment.model";
+import type { Offer } from "../offers/offer.types";
+import type { PaymentRecord } from "../payments/payment.types";
+import { buildCommerceResponse, deriveCommerceState } from "./commerce-state.service";
 
 export class OrchestratorError extends Error {
   statusCode: number;
@@ -122,6 +127,21 @@ const validateStructuredIntent = (
 
 const elapsedMs = (startedAt: number): number => Date.now() - startedAt;
 
+const unique = (values: string[]): string[] => [...new Set(values)];
+
+const supplementWithLocalSignals = (
+  extractedIntent: StructuredIntent,
+  localIntent: StructuredIntent,
+): StructuredIntent => ({
+  ...extractedIntent,
+  intent:
+    extractedIntent.intent !== "unknown" ? extractedIntent.intent : localIntent.intent,
+  category: extractedIntent.category ?? localIntent.category,
+  budget: extractedIntent.budget ?? localIntent.budget,
+  useCases: unique([...extractedIntent.useCases, ...localIntent.useCases]),
+  preferences: unique([...extractedIntent.preferences, ...localIntent.preferences]),
+});
+
 export const processCustomerMessage = async (
   conversationId: string,
 ): Promise<OrchestratorResult> => {
@@ -142,6 +162,17 @@ export const processCustomerMessage = async (
   }
 
   const provider = getAIProvider();
+  const latestOffer = await OfferModel.findOne({ conversationId })
+    .sort({ createdAt: -1, _id: -1 }).lean<Offer>().exec();
+  // A payment only describes the offer that created its backend order; an
+  // older verified payment must not override a newer conversation offer.
+  const latestOfferId = latestOffer && "_id" in latestOffer ? String(latestOffer._id) : "";
+  const latestPayment = latestOfferId
+    ? await PaymentModel.findOne({ conversationId, offerId: latestOfferId })
+      .sort({ createdAt: -1, _id: -1 }).lean<PaymentRecord>().exec()
+    : null;
+  const existingCommerceState = deriveCommerceState(latestOffer, latestPayment);
+  const previousFocusedProductId = latestOffer?.productId ?? conversation.selectedProductId?.toString() ?? conversation.recommendedProductIds[0]?.toString();
   const currentContext = compactContext(conversation.extractedContext ?? {});
   const recentMessages = toRecentMessages(conversation.messages);
 
@@ -153,10 +184,18 @@ export const processCustomerMessage = async (
       currentContext,
     }),
   );
+  const localIntent = extractIntentLocally({
+    latestCustomerMessage: latestCustomerMessage.content,
+    recentMessages,
+    currentContext,
+  });
   structuredMs = elapsedMs(structuredStartedAt);
   const extractionMetadata = provider.getMetadata();
 
-  const mergedIntent = mergeExtractedIntent(currentContext, extractedIntent);
+  const mergedIntent = mergeExtractedIntent(
+    currentContext,
+    supplementWithLocalSignals(extractedIntent, localIntent),
+  );
   const processingKey = `${conversationId}:${latestCustomerMessage.timestamp.toISOString()}:${latestCustomerMessage.content}`;
 
   await createAuditEvent({
@@ -218,7 +257,8 @@ export const processCustomerMessage = async (
     .map((result) => result.productId);
   const topRecommendation = groundedResults[0];
 
-  if (mergedIntent.intent === "product_search") {
+  const allowsDiscoveryAudit = existingCommerceState === "DISCOVERY" && mergedIntent.customerState !== "hesitating" && mergedIntent.customerState !== "ready_to_buy";
+  if (mergedIntent.intent === "product_search" && allowsDiscoveryAudit) {
     await createAuditEvent({
       conversationId,
       sessionId: conversation.sessionId,
@@ -233,7 +273,7 @@ export const processCustomerMessage = async (
     });
   }
 
-  if (topRecommendation) {
+  if (topRecommendation && allowsDiscoveryAudit) {
     await createAuditEvent({
       conversationId,
       sessionId: conversation.sessionId,
@@ -253,19 +293,13 @@ export const processCustomerMessage = async (
     });
   }
 
-  const recommendationStartedAt = Date.now();
-  const assistantContent = await provider.generateText({
-    intent: mergedIntent,
-    catalogResults: groundedResults,
-    latestCustomerMessage: latestCustomerMessage.content,
-  });
-  recommendationMs = elapsedMs(recommendationStartedAt);
-  const assistantMetadata = provider.getMetadata();
-  const proposedAction = proposePolicyAction(
-    conversationId,
-    mergedIntent,
-    groundedResults,
-  );
+  const focusedProduct = getFocusedCatalogResult(groundedResults, latestCustomerMessage.content, previousFocusedProductId);
+  const responseProducts = focusedProduct
+    ? [focusedProduct, ...groundedResults.filter(product => product.productId !== focusedProduct.productId)]
+    : groundedResults;
+  const proposedAction = existingCommerceState === "DISCOVERY"
+    ? proposePolicyAction(conversationId, mergedIntent, groundedResults, latestCustomerMessage.content, previousFocusedProductId)
+    : { action: "NO_ACTION" as const, conversationId, reason: "Existing commerce state is authoritative for this turn." };
   await createAuditEvent({
     conversationId,
     sessionId: conversation.sessionId,
@@ -282,6 +316,21 @@ export const processCustomerMessage = async (
     operationKey: `ai:proposal:${processingKey}`,
   });
   const policyDecision = await evaluateActionProposal(proposedAction);
+  const assistantResponseMode = existingCommerceState === "PAYMENT_VERIFIED" ? "PAYMENT_VERIFIED"
+    : existingCommerceState === "OFFER_ACCEPTED" ? "OFFER_ACCEPTED"
+    : existingCommerceState === "CHECKOUT_READY" ? "CHECKOUT_READY"
+    : existingCommerceState === "OFFER_AVAILABLE" ? "ACTIVE_OFFER"
+    : proposedAction.action === "CREATE_DISCOUNT" ? "HESITATION_POLICY_RESULT"
+    : proposedAction.action === "START_CHECKOUT" ? "CHECKOUT_READY"
+    : mergedIntent.customerState === "comparing" ? "COMPARISON" : "DISCOVERY";
+  const deterministicResponse = buildCommerceResponse({ state: existingCommerceState, offer: latestOffer, focusedProduct, policyDecision });
+  const recommendationStartedAt = Date.now();
+  const assistantContent = deterministicResponse ?? await provider.generateText({
+    intent: mergedIntent, catalogResults: responseProducts, latestCustomerMessage: latestCustomerMessage.content,
+    responseMode: assistantResponseMode, commerceState: existingCommerceState,
+  });
+  recommendationMs = elapsedMs(recommendationStartedAt);
+  const assistantMetadata = provider.getMetadata();
 
   await updateExtractedContext(conversationId, {
     ...mergedIntent,

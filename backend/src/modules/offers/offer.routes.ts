@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import {
   acceptOfferController,
+  createCheckoutOfferController,
   createOfferController,
   getConversationOffersController,
   getOfferController,
@@ -11,6 +12,7 @@ import {
 const offerRouter = Router();
 
 offerRouter.post("/", createOfferController);
+offerRouter.post("/checkout", createCheckoutOfferController);
 offerRouter.get("/conversation/:conversationId", getConversationOffersController);
 offerRouter.post("/:id/accept", acceptOfferController);
 offerRouter.post("/:id/reject", rejectOfferController);

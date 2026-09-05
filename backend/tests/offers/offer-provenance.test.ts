@@ -82,6 +82,35 @@ test("wrong action: a RECOMMEND_ALTERNATIVE or START_CHECKOUT proposal cannot au
   assert.equal(isMatchingActionProposalEvent(event, baseQuery), false);
 });
 
+test("valid START_CHECKOUT proposal matches checkout provenance for the same product", () => {
+  const event = buildActionProposedEvent({
+    action: "START_CHECKOUT",
+    requestedDiscountPercent: undefined,
+  });
+  const checkoutQuery: MatchingActionProposalQuery = {
+    conversationId,
+    action: "START_CHECKOUT",
+    productId,
+  };
+
+  assert.equal(isMatchingActionProposalEvent(event, checkoutQuery), true);
+});
+
+test("START_CHECKOUT provenance rejects the wrong product", () => {
+  const event = buildActionProposedEvent({
+    action: "START_CHECKOUT",
+    productId: otherProductId,
+    requestedDiscountPercent: undefined,
+  });
+  const checkoutQuery: MatchingActionProposalQuery = {
+    conversationId,
+    action: "START_CHECKOUT",
+    productId,
+  };
+
+  assert.equal(isMatchingActionProposalEvent(event, checkoutQuery), false);
+});
+
 test("wrong conversation: matching is scoped by the caller's conversationId filter, not just output fields", () => {
   // findMatchingActionProposalEvent (the DB-backed caller) filters
   // candidates by conversationId before this predicate ever runs, so an
